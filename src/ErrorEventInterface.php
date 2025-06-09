@@ -2,6 +2,6 @@
 namespace FoamyCastle\ErrorStack;
 interface ErrorEventInterface
 {
-    function onRaise():void;
-    function onThrow():void;
+    function onRaise($context=null):void;
+    function onThrow($context=null):\Throwable;
 }

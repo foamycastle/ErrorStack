@@ -1,5 +1,7 @@
 <?php
 namespace FoamyCastle\ErrorStack;
+use Throwable;
+
 abstract class ErrorEvent implements ErrorEventInterface
 {
     /**
@@ -11,13 +13,18 @@ abstract class ErrorEvent implements ErrorEventInterface
     /**
      * Register an ErrorEvent object
      * @param ErrorEvent $errorEvent
-     * @param string $name
      * @return void
      */
-    public static function Register(ErrorEvent $errorEvent, string $name=''):void
+    public static function Register(ErrorEvent $errorEvent):void
     {
+        $name=$errorEvent->name;
+        //if the name property is blank, let the object be registered by its class name
         if(empty($name)){
-            $name=$errorEvent->name;
+            $lastSeparator=strripos($errorEvent->throwable::class,'\\');
+            if($lastSeparator===false){
+                $name=$errorEvent->throwable::class;
+            }
+            $name=substr($name,$lastSeparator);
         }
         self::$errorThrowables[$name] = $errorEvent;
     }
@@ -41,18 +48,43 @@ abstract class ErrorEvent implements ErrorEventInterface
     {
         self::isRegistered($name) && self::$errorThrowables[$name]->onThrow();
     }
+
+    /**
+     * Determine if a name is already registered in the ErrorStack
+     * @param string $name
+     * @return bool
+     */
     private static function isRegistered(string $name):bool
     {
         return isset(self::$errorThrowables[$name]);
     }
+
+    /**
+     * The throwable object to be triggered
+     * @var Throwable|mixed
+     */
     public readonly \Throwable $throwable;
-    public readonly string $name;
-    public function __construct(string $name, string $throwable)
+    public function __construct(
+        string $errorClass,
+        public readonly string $name="",
+        public readonly string $message="",
+        public readonly int $code=0,
+        public readonly ?\Throwable $previous=null
+    )
     {
-        if(!class_exists($throwable) || (!($throwable instanceof \Throwable)) ){
-            throw new \Exception("$throwable is not a valid Throwable");
+        //error class does not exist
+        if(!(class_exists($errorClass))){
+            throw new \Error("Class $errorClass does not exist");
         }
-        self::Register($this, $throwable);
+
+        //test for valid error object
+        if(!($errorClass instanceof Throwable)){
+            throw new \Error("Class $errorClass does not implement Throwable");
+        }
+
+        //create a new error object and registered it
+        $this->throwable=new $errorClass($this->message,$this->code,$name,$previous);
+        self::Register($this);
     }
     public static function __callStatic(string $name, array $arguments)
     {
