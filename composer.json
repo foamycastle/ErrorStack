@@ -1,0 +1,9 @@
+{
+  "name": "foamycastle/errorstack",
+  "require": {
+    "php": ">=8.3"
+  },
+  "autoload": {
+    "FoamyCastle\\ErrorStack\\": "src"
+  }
+}
