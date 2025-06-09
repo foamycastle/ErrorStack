@@ -2,13 +2,23 @@
 namespace FoamyCastle\ErrorStack;
 use Throwable;
 
-abstract class ErrorEvent implements ErrorEventInterface
+abstract class ErrorEvent extends \Exception implements ErrorEventInterface
 {
+    public const int SET_CONTEXT=64;
+    public const int SET_MESSAGE=128;
+    public const int SET_CODE=256;
+
     /**
      * A stack of error events
      * @var array<string,ErrorEvent>
      */
     private static array $errorThrowables = [];
+
+    /**
+     * Stores the previous exception handler
+     * @var callable $oldExceptionHandler
+     */
+    private static $oldExceptionHandler=null;
 
     /**
      * Register an ErrorEvent object
@@ -18,15 +28,33 @@ abstract class ErrorEvent implements ErrorEventInterface
     public static function Register(ErrorEvent $errorEvent):void
     {
         $name=$errorEvent->name;
-        //if the name property is blank, let the object be registered by its class name
-        if(empty($name)){
-            $lastSeparator=strripos($errorEvent->throwable::class,'\\');
-            if($lastSeparator===false){
-                $name=$errorEvent->throwable::class;
-            }
-            $name=substr($name,$lastSeparator);
-        }
         self::$errorThrowables[$name] = $errorEvent;
+    }
+
+    public static function Handler(\Throwable $exception):void
+    {
+        $implements=class_implements($exception);
+        if(!($exception instanceof ErrorEvent)){
+            if(!empty(self::$oldExceptionHandler)){
+                (self::$oldExceptionHandler)($exception);
+            }
+        }
+        $exception->onThrow();
+
+    }
+
+    public static function ActivateHandler()
+    {
+        self::$oldExceptionHandler=set_exception_handler([ErrorEvent::class,'Handler']);
+    }
+
+    public static function DeactivateHandler():void
+    {
+        if(!empty(self::$oldExceptionHandler)){
+            set_exception_handler(self::$oldExceptionHandler);
+        }else {
+            set_exception_handler(null);
+        }
     }
 
     /**
@@ -34,19 +62,9 @@ abstract class ErrorEvent implements ErrorEventInterface
      * @param string $name
      * @return void
      */
-    public static function Raise(string $name):void
+    public static function Raise(string $name, $context=null):void
     {
-        self::isRegistered($name) && self::$errorThrowables[$name]->onRaise();
-    }
-
-    /**
-     * Call the onThrow method on the ErrorEvent object
-     * @param string $name
-     * @return void
-     */
-    public static function Throw(string $name):void
-    {
-        self::isRegistered($name) && self::$errorThrowables[$name]->onThrow();
+        self::isRegistered($name) && self::$errorThrowables[$name]->onRaise($context);
     }
 
     /**
@@ -59,33 +77,6 @@ abstract class ErrorEvent implements ErrorEventInterface
         return isset(self::$errorThrowables[$name]);
     }
 
-    /**
-     * The throwable object to be triggered
-     * @var Throwable|mixed
-     */
-    public readonly \Throwable $throwable;
-    public function __construct(
-        string $errorClass,
-        public readonly string $name="",
-        public readonly string $message="",
-        public readonly int $code=0,
-        public readonly ?\Throwable $previous=null
-    )
-    {
-        //error class does not exist
-        if(!(class_exists($errorClass))){
-            throw new \Error("Class $errorClass does not exist");
-        }
-
-        //test for valid error object
-        if(!($errorClass instanceof Throwable)){
-            throw new \Error("Class $errorClass does not implement Throwable");
-        }
-
-        //create a new error object and registered it
-        $this->throwable=new $errorClass($this->message,$this->code,$name,$previous);
-        self::Register($this);
-    }
     public static function __callStatic(string $name, array $arguments)
     {
         //no argument provided or argument is not a string
@@ -104,11 +95,52 @@ abstract class ErrorEvent implements ErrorEventInterface
                 self::$errorThrowables[$arguments[0]]->onRaise();
                 return;
             case 'Throw':
-                self::$errorThrowables[$arguments[0]]->onThrow();
+                self::$errorThrowables[$arguments[0]]->getThrowable();
                 return;
             default:
                 throw new \Exception("Unknown ErrorEvent::$arguments[0]");
         }
+    }
+
+    protected string $name;
+    protected mixed $context;
+    public function __construct(
+        string $name,
+        string $message='',
+        int $code=0,
+        \Throwable $previous = null
+    )
+    {
+        $this->name=$name;
+        parent::__construct($message, $code, $previous);
+        self::Register($this);
+    }
+    public function setContext(mixed $context): void
+    {
+        $this->context=$context;
+    }
+    public function __invoke(...$args)
+    {
+        if(is_int($args[0])){
+            switch($args[0]){
+                case self::SET_CODE:
+                    if(!is_int($args[1])){
+                        return null;
+                    }
+                    $this->code=$args[1];
+                    break;
+                case self::SET_MESSAGE:
+                    if(!is_string($args[1])){
+                        return null;
+                    }
+                    $this->message=$args[1];
+                    break;
+                case self::SET_CONTEXT:
+                    $this->setContext($args[1]);
+                    break;
+            }
+        }
+        return $this;
     }
 
 }
