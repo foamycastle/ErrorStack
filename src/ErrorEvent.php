@@ -25,6 +25,22 @@ abstract class ErrorEvent extends \Exception implements ErrorEventInterface
      * @var bool
      */
     protected static bool $handlerActive=false;
+    protected static bool $autoHandler=true;
+
+    /**
+     * Turns on auto handling so that ErrorEvent::ActivateHandler does not need to be invoked
+     * before a throw
+     * @param bool $auto
+     * @return void
+     */
+    public static function AutoHandle(bool $auto=true):void
+    {
+        if($auto){
+            if(!self::$handlerActive){
+                self::ActivateHandler();
+            }
+        }
+    }
 
     /**
      * Public getter for $handlerActive field
