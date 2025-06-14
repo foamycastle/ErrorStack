@@ -21,10 +21,7 @@ class NotANumber extends ErrorEvent
 
     function getThrowable($context = null): \Throwable|null
     {
-        if(is_int($context)) return null;
-        return new self();
     }
-
     function onThrow($context = null): void
     {
         echo sprintf($this->message, $context ?? $this->context);

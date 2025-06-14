@@ -21,6 +21,21 @@ abstract class ErrorEvent extends \Exception implements ErrorEventInterface
     private static $oldExceptionHandler=null;
 
     /**
+     * Indicates whether the exception handler is active
+     * @var bool
+     */
+    protected static bool $handlerActive=false;
+
+    /**
+     * Public getter for $handlerActive field
+     * @return bool
+     */
+    public static function isHandlerActive(): bool
+    {
+        return self::$handlerActive;
+    }
+
+    /**
      * Register an ErrorEvent object
      * @param ErrorEvent $errorEvent
      * @return void
@@ -39,8 +54,9 @@ abstract class ErrorEvent extends \Exception implements ErrorEventInterface
                 (self::$oldExceptionHandler)($exception);
             }
         }
-        $exception->onThrow();
-
+        if(in_array(ErrorEvent::class, $implements)) {
+            $exception->onThrow();
+        }
     }
 
     public static function ActivateHandler()
