@@ -25,7 +25,18 @@ abstract class ErrorEvent extends \Exception implements ErrorEventInterface
      * @var bool
      */
     protected static bool $handlerActive=false;
-    protected static bool $autoHandler=true;
+    protected static bool $autoThrow=false;
+    protected static bool $autoRaise=false;
+
+    public static function AutoRaise(bool $auto):void
+    {
+        self::$autoRaise=$auto;
+    }
+
+    public static function AutoThrow(bool $auto):void
+    {
+        self::$autoThrow=$auto;
+    }
 
     /**
      * Turns on auto handling so that ErrorEvent::ActivateHandler does not need to be invoked
@@ -64,14 +75,18 @@ abstract class ErrorEvent extends \Exception implements ErrorEventInterface
 
     public static function Handler(\Throwable $exception):void
     {
-        $implements=class_implements($exception);
         if(!($exception instanceof ErrorEvent)){
             if(!empty(self::$oldExceptionHandler)){
                 (self::$oldExceptionHandler)($exception);
             }
         }
-        if(in_array(ErrorEvent::class, $implements)) {
-            $exception->onThrow();
+        if($exception instanceof ErrorEventInterface) {
+            if(self::$autoRaise){
+                $exception->onRaise();
+            }
+            if(self::$autoThrow){
+                $exception->onThrow();
+            }
         }
     }
 
