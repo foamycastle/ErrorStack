@@ -25,26 +25,24 @@ abstract class ErrorEvent extends \Exception implements ErrorEventInterface
      * @var bool
      */
     protected static bool $handlerActive=false;
-    protected static bool $autoThrow=false;
-    protected static bool $autoRaise=false;
 
-    public static function AutoRaise(bool $auto):void
+    public static function AutoRaise(bool $auto): static
     {
         self::$autoRaise=$auto;
     }
 
-    public static function AutoThrow(bool $auto):void
+    public static function AutoThrow(ErrorEvent $errorEvent): ErrorEventInterface
     {
-        self::$autoThrow=$auto;
+
     }
 
     /**
      * Turns on auto handling so that ErrorEvent::ActivateHandler does not need to be invoked
      * before a throw
      * @param bool $auto
-     * @return void
+     * @return ErrorEvent
      */
-    public static function AutoHandle(bool $auto=true):void
+    public static function AutoHandle(bool $auto=true): static
     {
         if($auto){
             if(!self::$handlerActive){
@@ -65,12 +63,13 @@ abstract class ErrorEvent extends \Exception implements ErrorEventInterface
     /**
      * Register an ErrorEvent object
      * @param ErrorEvent $errorEvent
-     * @return void
+     * @return ErrorEvent
      */
-    public static function Register(ErrorEvent $errorEvent):void
+    public static function Register(ErrorEvent $errorEvent):ErrorEvent
     {
         $name=$errorEvent->name;
         self::$errorThrowables[$name] = $errorEvent;
+        return $errorEvent;
     }
 
     public static function Handler(\Throwable $exception):void
@@ -86,11 +85,16 @@ abstract class ErrorEvent extends \Exception implements ErrorEventInterface
             }
             if(self::$autoThrow){
                 $exception->onThrow();
+                return;
+            }
+            if(!$exception->suppressThrow) {
+                set_exception_handler(null);
+                throw $exception;
             }
         }
     }
 
-    public static function ActivateHandler()
+    public static function ActivateHandler():void
     {
         self::$oldExceptionHandler=set_exception_handler([ErrorEvent::class,'Handler']);
     }
@@ -126,31 +130,33 @@ abstract class ErrorEvent extends \Exception implements ErrorEventInterface
 
     public static function __callStatic(string $name, array $arguments)
     {
-        //no argument provided or argument is not a string
-        if(empty($arguments[0]) || !is_string($arguments[0])){
-            throw new \Exception("argument provided to ErrorEvent::$name is not a string");
-        }
 
         //argument provided is not registered
-        if(!self::isRegistered($arguments[0])){
-            return;
+        if(!self::isRegistered($name)){
+            return null;
         }
 
         //
         switch($name){
             case 'Raise':
-                self::$errorThrowables[$arguments[0]]->onRaise();
-                return;
+                self::$errorThrowables[$arguments[0]]->onRaise($arguments[1] ??  null);
+                break;
             case 'Throw':
-                self::$errorThrowables[$arguments[0]]->getThrowable();
-                return;
+                self::$errorThrowables[$arguments[0]]->onThrow($arguments[1] ??  null);
+                break;
             default:
-                throw new \Exception("Unknown ErrorEvent::$arguments[0]");
+                if(!empty($arguments)){
+                    return call_user_func(self::$errorThrowables[$name], $arguments[0] ??  null);
+                }
+                return self::$errorThrowables[$name] ?? null;
         }
     }
 
     protected string $name;
     protected mixed $context;
+    protected bool $autoThrow=false;
+    protected bool $autoRaise=false;
+    protected bool $suppressThrow=false;
     public function __construct(
         string $name,
         string $message='',
@@ -162,23 +168,31 @@ abstract class ErrorEvent extends \Exception implements ErrorEventInterface
         parent::__construct($message, $code, $previous);
         self::Register($this);
     }
-    public function setContext(mixed $context): void
+
+    function suppressThrow(bool $suppress): static
+    {
+        $this->suppressThrow=$suppress;
+        return $this;
+    }
+
+    public function setContext(mixed &$context): static
     {
         $this->context=$context;
+        return $this;
     }
-    public function __invoke(...$args)
+    public function __invoke(...$args):static
     {
         if(is_int($args[0])){
             switch($args[0]){
                 case self::SET_CODE:
                     if(!is_int($args[1])){
-                        return null;
+                        return $this;
                     }
                     $this->code=$args[1];
                     break;
                 case self::SET_MESSAGE:
                     if(!is_string($args[1])){
-                        return null;
+                        return $this;
                     }
                     $this->message=$args[1];
                     break;

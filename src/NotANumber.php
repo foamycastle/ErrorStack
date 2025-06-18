@@ -14,17 +14,16 @@ class NotANumber extends ErrorEvent
         );
     }
 
-    function onRaise($context = null): void
-    {
-        echo sprintf($this->message, $context);
-    }
-
-    function getThrowable($context = null): \Throwable|null
-    {
-    }
-    function onThrow($context = null): void
+    function onRaise($context = null): NotANumber
     {
         echo sprintf($this->message, $context ?? $this->context);
+        return $this;
+    }
+
+    function onThrow($context = null): NotANumber
+    {
+        echo sprintf($this->message, $context ?? $this->context);
+        return $this;
     }
 
 }
